@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fake News Detection Demo</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #fff8f1;
+        --card: #fff;
+        --text: #292524;
+        --muted: #78716c;
+        --accent: #ea580c;
+        --dark: #c2410c;
+        --border: #e7e5e4;
+        --soft: #fff7ed;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        padding: 32px 16px;
+        display: grid;
+        place-items: center;
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(ellipse at top left, #ffedd5 0, transparent 42%),
+          var(--bg);
+      }
+      .container {
+        width: min(100%, 720px);
+        padding: clamp(24px, 5vw, 44px);
+        background: var(--card);
+        border: 1px solid rgba(231, 229, 228, 0.8);
+        border-radius: 22px;
+        box-shadow: 0 20px 55px rgba(124, 45, 18, 0.1);
+      }
+      h1 {
+        margin: 0;
+        text-align: center;
+        color: var(--dark);
+        font-size: clamp(2rem, 6vw, 2.7rem);
+        letter-spacing: -0.05em;
+      }
+      .subtitle {
+        margin: 8px 0 24px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.95rem;
+        font-weight: 500;
+      }
+      .notice {
+        padding: 12px 14px;
+        border: 1px solid #fed7aa;
+        border-radius: 12px;
+        background: var(--soft);
+        color: #7c2d12;
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      label {
+        font-size: 0.92rem;
+        font-weight: 650;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 14px 15px;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        outline: none;
+        background: #fffdfb;
+        color: var(--text);
+        font: inherit;
+        line-height: 1.55;
+      }
+      textarea {
+        min-height: 190px;
+        resize: vertical;
+      }
+      input:focus,
+      textarea:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.13);
+      }
+      button {
+        min-height: 48px;
+        padding: 12px 18px;
+        border: 0;
+        border-radius: 12px;
+        background: var(--accent);
+        color: white;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--dark);
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.7;
+      }
+      .result {
+        margin-top: 22px;
+        padding: 18px 20px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: #fafaf9;
+      }
+      .result[hidden] {
+        display: none;
+      }
+      .result h2 {
+        margin: 0 0 8px;
+        color: var(--dark);
+        font-size: 1.1rem;
+      }
+      .pill {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #ffedd5;
+        color: #9a3412;
+        font-size: 0.88rem;
+        font-weight: 750;
+      }
+      .scores {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin: 12px 0;
+        color: #57534e;
+        font-size: 0.92rem;
+      }
+      .result-note {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 1.5;
+      }
+      .error {
+        color: #b91c1c;
+      }
+      @media (max-width: 480px) {
+        body {
+          padding: 18px 12px;
+        }
+        .container {
+          border-radius: 16px;
+        }
+        textarea {
+          min-height: 160px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Fake News Detection</h1>
+      <h2 class="subtitle">Hugging Face Transformer</h2>
+      <form id="prediction-form">
+        <label for="headline-input"
+          >Headline
+          <span style="font-weight: 400; color: #78716c"
+            >(optional)</span
+          ></label
+        >
+        <input
+          id="headline-input"
+          maxlength="2000"
+          placeholder="Paste the article headline"
+        />
+        <label for="article-input">Article text</label>
+        <textarea
+          id="article-input"
+          maxlength="30000"
+          placeholder="Paste the article text here..."
+          required
+        ></textarea>
+        <button type="submit">Analyze text</button>
+      </form>
+      <section class="result" id="result" aria-live="polite" hidden>
+        <h2 id="result-heading">Model output</h2>
+        <span class="pill" id="predicted-label"></span>
+        <div class="scores">
+          <span id="fake-score"></span><span id="real-score"></span>
+        </div>
+        <p class="result-note" id="result-note"></p>
+      </section>
+    </main>
+    <script>
+      const form = document.getElementById("prediction-form");
+      const result = document.getElementById("result");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = form.querySelector("button");
+        const headline = document.getElementById("headline-input").value.trim();
+        const body_text = document.getElementById("article-input").value.trim();
+        if (!headline && !body_text) return;
+        button.disabled = true;
+        button.textContent = "Analyzing…";
+        result.hidden = false;
+        document.getElementById("result-heading").textContent = "Model output";
+        document.getElementById("predicted-label").textContent = "Loading…";
+        document.getElementById("result-note").textContent =
+          "The model is processing the text.";
+        document.getElementById("fake-score").textContent = "";
+        document.getElementById("real-score").textContent = "";
+        try {
+          const response = await fetch("/predict/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ headline, body_text }),
+          });
+          const data = await response.json();
+          if (!response.ok)
+            throw new Error(data.detail || "Server error: " + response.status);
+          document.getElementById("predicted-label").textContent =
+            data.predicted_label;
+          document.getElementById("fake-score").textContent =
+            "Fake score: " + (data.p_fake * 100).toFixed(1) + "%";
+          document.getElementById("real-score").textContent =
+            "Real score: " + (data.p_real * 100).toFixed(1) + "%";
+          document.getElementById("result-note").textContent = data.notice;
+          result.classList.remove("error");
+        } catch (error) {
+          document.getElementById("result-heading").textContent =
+            "Could not analyze text";
+          document.getElementById("predicted-label").textContent =
+            "Unavailable";
+          document.getElementById("result-note").textContent = error.message;
+          result.classList.add("error");
+        } finally {
+          button.disabled = false;
+          button.textContent = "Analyze text";
+        }
+      });
+
+      // Support pre-rendering states via query parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const preHeadline = urlParams.get("headline");
+      const preArticle = urlParams.get("article");
+      const preLabel = urlParams.get("label");
+      const preFake = urlParams.get("fake_score");
+      const preReal = urlParams.get("real_score");
+      const preNote = urlParams.get("note");
+      const preError = urlParams.get("error");
+
+      if (preHeadline) document.getElementById("headline-input").value = preHeadline;
+      if (preArticle) document.getElementById("article-input").value = preArticle;
+
+      if (preLabel) {
+        result.hidden = false;
+        document.getElementById("predicted-label").textContent = preLabel;
+        if (preFake) document.getElementById("fake-score").textContent = "Fake score: " + preFake + "%";
+        if (preReal) document.getElementById("real-score").textContent = "Real score: " + preReal + "%";
+        if (preNote) document.getElementById("result-note").textContent = preNote;
+        if (preError) {
+          result.classList.add("error");
+          document.getElementById("result-heading").textContent = "Could not analyze text";
+        }
+      }
+    </script>
+  </body>
+</html>
